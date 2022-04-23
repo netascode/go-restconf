@@ -53,18 +53,18 @@ func TestClientGetData(t *testing.T) {
 
 	// Success
 	gock.New(testURL).Get("/restconf/data/url").Reply(200)
-	_, err = client.GetData("url")
+	_, _, err = client.GetData("url")
 	assert.NoError(t, err)
 
 	// HTTP error
 	gock.New(testURL).Get("/restconf/data/url").ReplyError(errors.New("fail"))
-	_, err = client.GetData("url")
+	_, _, err = client.GetData("url")
 	assert.Error(t, err)
 
 	// Invalid HTTP status code
 	gock.New(testURL).Get("/restconf/data/url").Reply(405)
-	_, err = client.GetData("url")
-	assert.Error(t, err)
+	_, code, _ := client.GetData("url")
+	assert.Equal(t, code, 405)
 
 	// Error decoding response body
 	gock.New(testURL).
@@ -74,7 +74,7 @@ func TestClientGetData(t *testing.T) {
 			res.Body = ioutil.NopCloser(ErrReader{})
 			return res
 		})
-	_, err = client.GetData("url")
+	_, _, err = client.GetData("url")
 	assert.Error(t, err)
 }
 
@@ -87,18 +87,18 @@ func TestClientPostData(t *testing.T) {
 
 	// Success
 	gock.New(testURL).Post("/restconf/data/url").Reply(200)
-	_, err = client.PostData("url", "{}")
+	_, _, err = client.PostData("url", "{}")
 	assert.NoError(t, err)
 
 	// HTTP error
 	gock.New(testURL).Post("/restconf/data/url").ReplyError(errors.New("fail"))
-	_, err = client.PostData("url", "{}")
+	_, _, err = client.PostData("url", "{}")
 	assert.Error(t, err)
 
 	// Invalid HTTP status code
 	gock.New(testURL).Post("/restconf/data/url").Reply(405)
-	_, err = client.PostData("url", "{}")
-	assert.Error(t, err)
+	_, code, _ := client.PostData("url", "{}")
+	assert.Equal(t, code, 405)
 
 	// Error decoding response body
 	gock.New(testURL).
@@ -108,7 +108,7 @@ func TestClientPostData(t *testing.T) {
 			res.Body = ioutil.NopCloser(ErrReader{})
 			return res
 		})
-	_, err = client.PostData("url", "{}")
+	_, _, err = client.PostData("url", "{}")
 	assert.Error(t, err)
 }
 
