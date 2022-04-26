@@ -4,6 +4,7 @@ package restconf
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -141,15 +142,14 @@ func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Re
 //
 //  req := client.NewReq("GET", "Cisco-IOS-XE-native:native/hostname", nil)
 //  res, _ := client.Do(req)
-func (client *Client) Do(req Req) (Res, int, error) {
+func (client *Client) Do(req Req) (Res, error) {
 	// retain the request body across multiple attempts
 	var body []byte
 	if req.HttpReq.Body != nil {
 		body, _ = ioutil.ReadAll(req.HttpReq.Body)
 	}
 
-	var res Res
-	var status int
+	res := Res{}
 
 	for attempts := 0; ; attempts++ {
 		req.HttpReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))
@@ -160,47 +160,77 @@ func (client *Client) Do(req Req) (Res, int, error) {
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] HTTP Connection error occured: %+v", err)
 				log.Printf("[DEBUG] Exit from Do method")
-				return Res{}, 0, err
+				return res, err
 			} else {
 				log.Printf("[ERROR] HTTP Connection failed: %s, retries: %v", err, attempts)
 				continue
 			}
 		}
 
-		status = httpRes.StatusCode
+		res.StatusCode = httpRes.StatusCode
 		defer httpRes.Body.Close()
 		bodyBytes, err := ioutil.ReadAll(httpRes.Body)
 		if err != nil {
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] Cannot decode response body: %+v", err)
 				log.Printf("[DEBUG] Exit from Do method")
-				return Res{}, status, err
+				return res, err
 			} else {
 				log.Printf("[ERROR] Cannot decode response body: %s, retries: %v", err, attempts)
 				continue
 			}
 		}
-		res = Res(gjson.ParseBytes(bodyBytes))
-		log.Printf("[DEBUG] HTTP Response: %s", res.Raw)
 
-		// only retry after transient 500-504 responses
-		if httpRes.StatusCode < 500 || httpRes.StatusCode > 504 || (req.HttpReq.Method == "DELETE" && httpRes.StatusCode == 502) {
+		if httpRes.StatusCode >= 300 && len(bodyBytes) > 0 {
+			var errors ErrorsRoot
+			err = json.Unmarshal(bodyBytes, &errors)
+			if err != nil {
+				log.Printf("[DEBUG] Failed to parse RESTCONF errors: %+v", err)
+			}
+			res.Errors = errors.Errors
+		}
+		res.Res = gjson.ParseBytes(bodyBytes)
+		log.Printf("[DEBUG] HTTP Response: %s", res.Res.Raw)
+
+		// exit if object cannot be deleted
+		if req.HttpReq.Method == "DELETE" && httpRes.StatusCode == 502 {
 			log.Printf("[DEBUG] Exit from Do method")
 			break
-		} else {
+		}
+		// only retry after transient 500-504 responses
+		if httpRes.StatusCode >= 500 && httpRes.StatusCode <= 504 {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v", httpRes.StatusCode)
+				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
 				log.Printf("[DEBUG] Exit from Do method")
-				return Res{}, status, fmt.Errorf("HTTP Request failed: StatusCode %v", httpRes.StatusCode)
+				return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
 			} else {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, Retries: %v", httpRes.StatusCode, attempts)
+				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v, Retries: %v", httpRes.StatusCode, res.Errors, attempts)
 				continue
 			}
 		}
+		// do not retry after non-2xx responses
+		if httpRes.StatusCode < 200 || httpRes.StatusCode > 299 {
+			log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
+			log.Printf("[DEBUG] Exit from Do method")
+			return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
+		}
+		// check RESTCONF errors
+		if len(res.Errors.Error) > 0 {
+			if ok := client.Backoff(attempts); !ok {
+				log.Printf("[ERROR] RESTCONF Request failed: %+v", res.Errors)
+				log.Printf("[DEBUG] Exit from Do method")
+				return res, fmt.Errorf("RESTCONF Request failed: %+v", res.Errors)
+			} else {
+				log.Printf("[ERROR] RESTCONF Request failed: %+v, Retries: %v", res.Errors, attempts)
+				continue
+			}
+		}
+
+		log.Printf("[DEBUG] Exit from Do method")
+		break
 	}
 
-	// TODO: parse RESTCONF errors
-	return res, status, nil
+	return res, nil
 }
 
 // Discover RESTCONF API endpoint
@@ -229,14 +259,14 @@ func (client *Client) discoverRestconfEndpoint(mods ...func(*Req)) error {
 }
 
 // GetData makes a GET request and returns a GJSON result.
-func (client *Client) GetData(path string, mods ...func(*Req)) (Res, int, error) {
+func (client *Client) GetData(path string, mods ...func(*Req)) (Res, error) {
 	client.discoverRestconfEndpoint()
 	req := client.NewReq("GET", RestconfDataEndpoint+"/"+path, nil, mods...)
 	return client.Do(req)
 }
 
 // DeleteData makes a DELETE request and returns a GJSON result.
-func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, int, error) {
+func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, error) {
 	client.discoverRestconfEndpoint()
 	req := client.NewReq("DELETE", RestconfDataEndpoint+"/"+path, nil, mods...)
 	return client.Do(req)
@@ -244,7 +274,7 @@ func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, int, err
 
 // PostData makes a POST request and returns a GJSON result.
 // Hint: Use the Body struct to easily create POST body data.
-func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, int, error) {
+func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, error) {
 	client.discoverRestconfEndpoint()
 	req := client.NewReq("POST", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
@@ -252,7 +282,7 @@ func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, int,
 
 // PutData makes a PUT request and returns a GJSON result.
 // Hint: Use the Body struct to easily create PUT body data.
-func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, int, error) {
+func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, error) {
 	client.discoverRestconfEndpoint()
 	req := client.NewReq("PUT", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
@@ -260,7 +290,7 @@ func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, int, 
 
 // PatchData makes a PATCH request and returns a GJSON result.
 // Hint: Use the Body struct to easily create PATCH body data.
-func (client *Client) PatchData(path, data string, mods ...func(*Req)) (Res, int, error) {
+func (client *Client) PatchData(path, data string, mods ...func(*Req)) (Res, error) {
 	client.discoverRestconfEndpoint()
 	req := client.NewReq("PATCH", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)

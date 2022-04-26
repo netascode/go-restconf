@@ -32,7 +32,7 @@ func (body Body) SetRaw(path, rawValue string) Body {
 
 // Res creates a Res object, i.e. a GJSON result object.
 func (body Body) Res() Res {
-	return gjson.Parse(body.Str)
+	return Res{Res: gjson.Parse(body.Str)}
 }
 
 // Req wraps http.Request for API requests.

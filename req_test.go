@@ -9,7 +9,7 @@ import (
 
 // TestSetRaw tests the Body::SetRaw method.
 func TestSetRaw(t *testing.T) {
-	name := Body{}.SetRaw("a", `{"name":"a"}`).Res().Get("a.name").Str
+	name := Body{}.SetRaw("a", `{"name":"a"}`).Res().Res.Get("a.name").Str
 	assert.Equal(t, "a", name)
 }
 
@@ -19,11 +19,11 @@ func TestQuery(t *testing.T) {
 	client := testClient()
 
 	gock.New(testURL).Get("/url").MatchParam("foo", "bar").Reply(200)
-	_, _, err := client.GetData("/url", Query("foo", "bar"))
+	_, err := client.GetData("/url", Query("foo", "bar"))
 	assert.NoError(t, err)
 
 	// Test case for comma-separated parameters
 	gock.New(testURL).Get("/url").MatchParam("foo", "bar,baz").Reply(200)
-	_, _, err = client.GetData("/url", Query("foo", "bar,baz"))
+	_, err = client.GetData("/url", Query("foo", "bar,baz"))
 	assert.NoError(t, err)
 }
