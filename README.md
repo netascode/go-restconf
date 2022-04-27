@@ -23,7 +23,7 @@ func main() {
     client, _ := restconf.NewClient("https://1.1.1.1", "user", "pwd", true)
 
     res, _ := client.GetData("Cisco-IOS-XE-native:native")
-    println(res.Get("Cisco-IOS-XE-native:native.hostname").String())
+    println(res.Res.Get("Cisco-IOS-XE-native:native.hostname").String())
 }
 ```
 
@@ -39,9 +39,9 @@ ROUTER-1
 
 ```go
 res, _ := client.GetData("Cisco-IOS-XE-native:native/interface/GigabitEthernet")
-println(res.Get("Cisco-IOS-XE-native:GigabitEthernet.0.name").String()) // name of first interface
+println(res.Res.Get("Cisco-IOS-XE-native:GigabitEthernet.0.name").String()) // name of first interface
 
-for _, int := range res.Get("Cisco-IOS-XE-native:GigabitEthernet").Array() {
+for _, int := range res.Res.Get("Cisco-IOS-XE-native:GigabitEthernet").Array() {
     println(int.Get("@pretty").Raw) // pretty print interface attributes
 }
 ```
