@@ -28,6 +28,42 @@ const (
 	RestconfDataEndpoint      string  = "/data"
 )
 
+type TransientError struct {
+	StatusCode   int
+	ErrorType    string
+	ErrorTag     string
+	ErrorAppTag  string
+	ErrorPath    string
+	ErrorMessage string
+	ErrorInfo    string
+}
+
+var TransientErrors = [...]TransientError{
+	TransientError{
+		StatusCode:   400,
+		ErrorTag:     "invalid-value",
+		ErrorMessage: "inconsistent value",
+	},
+	TransientError{
+		ErrorTag: "lock-denied",
+	},
+	TransientError{
+		StatusCode: 500,
+	},
+	TransientError{
+		StatusCode: 501,
+	},
+	TransientError{
+		StatusCode: 502,
+	},
+	TransientError{
+		StatusCode: 503,
+	},
+	TransientError{
+		StatusCode: 504,
+	},
+}
+
 // Client is an HTTP RESTCONF client.
 // Use restconf.NewClient to initiate a client.
 // This will ensure proper cookie handling and processing of modifiers.
@@ -137,6 +173,69 @@ func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Re
 	return req
 }
 
+// check if response is considered a transient error
+func checkTransientError(res Res) bool {
+	found := false
+	for _, resError := range res.Errors.Error {
+		for _, error := range TransientErrors {
+			found = false
+			if error.StatusCode != 0 {
+				if error.StatusCode == res.StatusCode {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if error.ErrorType != "" {
+				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorType); ok {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if error.ErrorTag != "" {
+				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorTag); ok {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if error.ErrorAppTag != "" {
+				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorAppTag); ok {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if error.ErrorPath != "" {
+				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorPath); ok {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if error.ErrorMessage != "" {
+				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorMessage); ok {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if error.ErrorInfo != "" {
+				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorInfo); ok {
+					found = true
+				} else {
+					continue
+				}
+			}
+			if found {
+				break
+			}
+		}
+	}
+	return found
+}
+
 // Do makes a request.
 // Requests for Do are built ouside of the client, e.g.
 //
@@ -188,6 +287,8 @@ func (client *Client) Do(req Req) (Res, error) {
 				log.Printf("[DEBUG] Failed to parse RESTCONF errors: %+v", err)
 			}
 			res.Errors = errors.Errors
+		} else {
+			res.Errors.Error = nil
 		}
 		res.Res = gjson.ParseBytes(bodyBytes)
 		log.Printf("[DEBUG] HTTP Response: %s", res.Res.Raw)
@@ -197,8 +298,8 @@ func (client *Client) Do(req Req) (Res, error) {
 			log.Printf("[DEBUG] Exit from Do method")
 			break
 		}
-		// only retry after transient 500-504 responses
-		if httpRes.StatusCode >= 500 && httpRes.StatusCode <= 504 {
+		// check transient errors
+		if checkTransientError(res) {
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
 				log.Printf("[DEBUG] Exit from Do method")
