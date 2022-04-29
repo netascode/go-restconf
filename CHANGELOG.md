@@ -1,4 +1,4 @@
-## 0.1.2 (unreleased)
+## 0.1.2
 
 - Parse RESTCONF errors and add to response
 - Improve error handling
