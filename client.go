@@ -15,16 +15,17 @@ import (
 	"net/http/cookiejar"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tidwall/gjson"
 )
 
 const (
-	DefaultMaxRetries         int     = 2
-	DefaultBackoffMinDelay    int     = 4
+	DefaultMaxRetries         int     = 10
+	DefaultBackoffMinDelay    int     = 1
 	DefaultBackoffMaxDelay    int     = 60
-	DefaultBackoffDelayFactor float64 = 3
+	DefaultBackoffDelayFactor float64 = 1.2
 	RestconfDataEndpoint      string  = "/data"
 )
 
@@ -46,6 +47,9 @@ var TransientErrors = [...]TransientError{
 	},
 	TransientError{
 		ErrorTag: "lock-denied",
+	},
+	TransientError{
+		ErrorTag: "in-use",
 	},
 	TransientError{
 		StatusCode: 500,
@@ -70,6 +74,8 @@ var TransientErrors = [...]TransientError{
 type Client struct {
 	// HttpClient is the *http.Client used for API requests.
 	HttpClient *http.Client
+	// Mutex to synchronize write operations
+	writeMutex sync.Mutex
 	// Url is the device url.
 	Url string
 	// Usr is the device username.
@@ -249,6 +255,11 @@ func (client *Client) Do(req Req) (Res, error) {
 	}
 
 	res := Res{}
+
+	if req.HttpReq.Method != "GET" {
+		client.writeMutex.Lock()
+		defer client.writeMutex.Unlock()
+	}
 
 	for attempts := 0; ; attempts++ {
 		req.HttpReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))

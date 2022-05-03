@@ -1,3 +1,7 @@
+## 0.1.3 (unrelease)
+
+- Optimize retries
+
 ## 0.1.2
 
 - Parse RESTCONF errors and add to response
