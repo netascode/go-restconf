@@ -1,4 +1,4 @@
-## 0.1.3 (unrelease)
+## 0.1.3
 
 - Optimize retries
 
