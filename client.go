@@ -208,35 +208,35 @@ func checkTransientError(res Res) bool {
 				}
 			}
 			if error.ErrorTag != "" {
-				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorTag); ok {
+				if ok, _ := regexp.MatchString(error.ErrorTag, resError.ErrorTag); ok {
 					found = true
 				} else {
 					continue
 				}
 			}
 			if error.ErrorAppTag != "" {
-				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorAppTag); ok {
+				if ok, _ := regexp.MatchString(error.ErrorAppTag, resError.ErrorAppTag); ok {
 					found = true
 				} else {
 					continue
 				}
 			}
 			if error.ErrorPath != "" {
-				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorPath); ok {
+				if ok, _ := regexp.MatchString(error.ErrorPath, resError.ErrorPath); ok {
 					found = true
 				} else {
 					continue
 				}
 			}
 			if error.ErrorMessage != "" {
-				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorMessage); ok {
+				if ok, _ := regexp.MatchString(error.ErrorMessage, resError.ErrorMessage); ok {
 					found = true
 				} else {
 					continue
 				}
 			}
 			if error.ErrorInfo != "" {
-				if ok, _ := regexp.MatchString(error.ErrorType, resError.ErrorInfo); ok {
+				if ok, _ := regexp.MatchString(error.ErrorInfo, resError.ErrorInfo); ok {
 					found = true
 				} else {
 					continue
@@ -331,6 +331,7 @@ func (client *Client) Do(req Req) (Res, error) {
 		}
 		// check transient errors
 		if checkTransientError(res) {
+			log.Printf("[DEBUG] Transient error detected")
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
 				log.Printf("[DEBUG] Exit from Do method")

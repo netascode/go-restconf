@@ -1,3 +1,7 @@
+## 0.1.5 (unreleased)
+
+- Fix transient error handling
+
 ## 0.1.4
 
 - Discover RESTCONF capabilities
