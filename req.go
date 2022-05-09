@@ -1,11 +1,31 @@
 package restconf
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
+
+type YangPatchRootModel struct {
+	YangPatch YangPatchModel `json:"ietf-yang-patch:yang-patch"`
+}
+
+type YangPatchModel struct {
+	PatchId string               `json:"patch-id"`
+	Comment string               `json:"comment,omitempty"`
+	Edit    []YangPatchEditModel `json:"edit"`
+}
+
+type YangPatchEditModel struct {
+	EditId    string          `json:"edit-id"`
+	Operation string          `json:"operation"`
+	Target    string          `json:"target"`
+	Point     string          `json:"point,omitempty"`
+	Where     string          `json:"where,omitempty"`
+	Value     json.RawMessage `json:"value,omitempty"`
+}
 
 // Body wraps SJSON for building JSON body strings.
 // Usage example:

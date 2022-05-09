@@ -1,3 +1,8 @@
+## 0.1.4 (unreleased)
+
+- Discover RESTCONF capabilities
+- Add support for YANG-Patch (RFC 8072)
+
 ## 0.1.3
 
 - Optimize retries

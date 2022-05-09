@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,11 +41,6 @@ type TransientError struct {
 }
 
 var TransientErrors = [...]TransientError{
-	TransientError{
-		StatusCode:   400,
-		ErrorTag:     "invalid-value",
-		ErrorMessage: "inconsistent value",
-	},
 	TransientError{
 		ErrorTag: "lock-denied",
 	},
@@ -75,7 +71,7 @@ type Client struct {
 	// HttpClient is the *http.Client used for API requests.
 	HttpClient *http.Client
 	// Mutex to synchronize write operations
-	writeMutex sync.Mutex
+	mutex sync.Mutex
 	// Url is the device url.
 	Url string
 	// Usr is the device username.
@@ -92,8 +88,20 @@ type Client struct {
 	BackoffMaxDelay int
 	// Backoff delay factor
 	BackoffDelayFactor float64
+	// True if discovery (RESTCONF API endpoint and capabilities) is complete
+	DiscoveryComplete bool
 	// Discovered RESTCONF API endpoint
 	RestconfEndpoint string
+	// RESTCONF capabilities
+	Capabilities []string
+	// RESTCONF YANG-Patch capability
+	YangPatchCapability bool
+}
+
+type YangPatchEdit struct {
+	Operation string
+	Target    string
+	Value     Body
 }
 
 // NewClient creates a new RESTCONF HTTP client.
@@ -257,8 +265,8 @@ func (client *Client) Do(req Req) (Res, error) {
 	res := Res{}
 
 	if req.HttpReq.Method != "GET" {
-		client.writeMutex.Lock()
-		defer client.writeMutex.Unlock()
+		client.mutex.Lock()
+		defer client.mutex.Unlock()
 	}
 
 	for attempts := 0; ; attempts++ {
@@ -292,14 +300,26 @@ func (client *Client) Do(req Req) (Res, error) {
 		}
 
 		if httpRes.StatusCode >= 300 && len(bodyBytes) > 0 {
-			var errors ErrorsRoot
-			err = json.Unmarshal(bodyBytes, &errors)
-			if err != nil {
-				log.Printf("[DEBUG] Failed to parse RESTCONF errors: %+v", err)
+			if req.HttpReq.Header.Get("Content-Type") == "application/yang-data+json" {
+				var errors ErrorsRootModel
+				err = json.Unmarshal(bodyBytes, &errors)
+				if err != nil {
+					log.Printf("[DEBUG] Failed to parse RESTCONF errors: %+v", err)
+				}
+				res.Errors = errors.Errors
+				res.YangPatchStatus = YangPatchStatusModel{}
+			} else if req.HttpReq.Header.Get("Content-Type") == "application/yang-patch+json" {
+				var status YangPatchStatusRootModel
+				err = json.Unmarshal(bodyBytes, &status)
+				if err != nil {
+					log.Printf("[DEBUG] Failed to parse RESTCONF YANG-Patch status response: %+v", err)
+				}
+				res.YangPatchStatus = status.YangPatchStatus
+				res.Errors = ErrorsModel{}
 			}
-			res.Errors = errors.Errors
 		} else {
-			res.Errors.Error = nil
+			res.Errors = ErrorsModel{}
+			res.YangPatchStatus = YangPatchStatusModel{}
 		}
 		res.Res = gjson.ParseBytes(bodyBytes)
 		log.Printf("[DEBUG] HTTP Response: %s", res.Res.Raw)
@@ -312,28 +332,28 @@ func (client *Client) Do(req Req) (Res, error) {
 		// check transient errors
 		if checkTransientError(res) {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
+				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
 				log.Printf("[DEBUG] Exit from Do method")
-				return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
+				return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
 			} else {
-				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v, Retries: %v", httpRes.StatusCode, res.Errors, attempts)
+				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v, Retries: %v", httpRes.StatusCode, res.Errors, res.YangPatchStatus, attempts)
 				continue
 			}
 		}
 		// do not retry after non-2xx responses
 		if httpRes.StatusCode < 200 || httpRes.StatusCode > 299 {
-			log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
+			log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
 			log.Printf("[DEBUG] Exit from Do method")
-			return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v", httpRes.StatusCode, res.Errors)
+			return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
 		}
 		// check RESTCONF errors
 		if len(res.Errors.Error) > 0 {
 			if ok := client.Backoff(attempts); !ok {
-				log.Printf("[ERROR] RESTCONF Request failed: %+v", res.Errors)
+				log.Printf("[ERROR] RESTCONF Request failed: %+v %+v", res.Errors, res.YangPatchStatus)
 				log.Printf("[DEBUG] Exit from Do method")
-				return res, fmt.Errorf("RESTCONF Request failed: %+v", res.Errors)
+				return res, fmt.Errorf("RESTCONF Request failed: %+v %+v", res.Errors, res.YangPatchStatus)
 			} else {
-				log.Printf("[ERROR] RESTCONF Request failed: %+v, Retries: %v", res.Errors, attempts)
+				log.Printf("[ERROR] RESTCONF Request failed: %+v %+v, Retries: %v", res.Errors, res.YangPatchStatus, attempts)
 				continue
 			}
 		}
@@ -345,41 +365,87 @@ func (client *Client) Do(req Req) (Res, error) {
 	return res, nil
 }
 
+func (client *Client) Discovery(mods ...func(*Req)) error {
+	client.mutex.Lock()
+	defer client.mutex.Unlock()
+	if !client.DiscoveryComplete {
+		err := client.discoverRestconfEndpoint()
+		if err != nil {
+			return err
+		}
+		client.discoverCapabilities()
+		if err != nil {
+			return err
+		}
+		client.DiscoveryComplete = true
+	}
+	return nil
+}
+
 // Discover RESTCONF API endpoint
 func (client *Client) discoverRestconfEndpoint(mods ...func(*Req)) error {
-	if client.RestconfEndpoint == "" {
-		req := client.NewReq("GET", "/.well-known/host-meta", nil, mods...)
-		res, err := client.HttpClient.Do(req.HttpReq)
-		if err != nil {
-			return err
-		}
-		defer res.Body.Close()
-		bodyBytes, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return err
-		}
-		bodyString := string(bodyBytes)
-		// hack to avoid XML parsing
-		re := regexp.MustCompile(`Link rel='restconf' href='(.+)'`)
-		matches := re.FindStringSubmatch(bodyString)
-		if len(matches) <= 1 {
-			return fmt.Errorf("Could not find RESTCONF API endpoint in discovery response: %s", bodyString)
-		}
-		client.RestconfEndpoint = matches[1]
+	req := client.NewReq("GET", "/.well-known/host-meta", nil, mods...)
+	res, err := client.HttpClient.Do(req.HttpReq)
+	if err != nil {
+		return err
 	}
+	defer res.Body.Close()
+	bodyBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	bodyString := string(bodyBytes)
+	log.Printf("[DEBUG] HTTP RESTCONF Discovery Response: %s", bodyString)
+	// hack to avoid XML parsing
+	re := regexp.MustCompile(`Link rel='restconf' href='(.+)'`)
+	matches := re.FindStringSubmatch(bodyString)
+	if len(matches) <= 1 {
+		return fmt.Errorf("Could not find RESTCONF API endpoint in discovery response: %s", bodyString)
+	}
+	client.RestconfEndpoint = matches[1]
+	log.Printf("[DEBUG] Discovered RESTCONF API endpoint: %s", matches[1])
+	return nil
+}
+
+// Discover RESTCONF capabilities
+func (client *Client) discoverCapabilities(mods ...func(*Req)) error {
+	req := client.NewReq("GET", RestconfDataEndpoint+"/ietf-restconf-monitoring:restconf-state/capabilities", nil, mods...)
+	res, err := client.HttpClient.Do(req.HttpReq)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	bodyBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	bodyString := string(bodyBytes)
+	log.Printf("[DEBUG] HTTP RESTCONF Capabilities Response: %s", bodyString)
+	var caps CapabilitiesRootModel
+	err = json.Unmarshal(bodyBytes, &caps)
+	if err != nil {
+		log.Printf("[DEBUG] Failed to parse RESTCONF capabilities: %+v", err)
+	}
+	client.Capabilities = caps.Capabilities.Capability
+	for _, c := range client.Capabilities {
+		if c == "urn:ietf:params:restconf:capability:yang-patch:1.0" {
+			client.YangPatchCapability = true
+		}
+	}
+	log.Printf("[DEBUG] Discovered RESTCONF capabilities: %v", client.Capabilities)
 	return nil
 }
 
 // GetData makes a GET request and returns a GJSON result.
 func (client *Client) GetData(path string, mods ...func(*Req)) (Res, error) {
-	client.discoverRestconfEndpoint()
+	client.Discovery()
 	req := client.NewReq("GET", RestconfDataEndpoint+"/"+path, nil, mods...)
 	return client.Do(req)
 }
 
 // DeleteData makes a DELETE request and returns a GJSON result.
 func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, error) {
-	client.discoverRestconfEndpoint()
+	client.Discovery()
 	req := client.NewReq("DELETE", RestconfDataEndpoint+"/"+path, nil, mods...)
 	return client.Do(req)
 }
@@ -387,7 +453,7 @@ func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, error) {
 // PostData makes a POST request and returns a GJSON result.
 // Hint: Use the Body struct to easily create POST body data.
 func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, error) {
-	client.discoverRestconfEndpoint()
+	client.Discovery()
 	req := client.NewReq("POST", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
 }
@@ -395,7 +461,7 @@ func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, erro
 // PutData makes a PUT request and returns a GJSON result.
 // Hint: Use the Body struct to easily create PUT body data.
 func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, error) {
-	client.discoverRestconfEndpoint()
+	client.Discovery()
 	req := client.NewReq("PUT", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
 }
@@ -403,9 +469,30 @@ func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, error
 // PatchData makes a PATCH request and returns a GJSON result.
 // Hint: Use the Body struct to easily create PATCH body data.
 func (client *Client) PatchData(path, data string, mods ...func(*Req)) (Res, error) {
-	client.discoverRestconfEndpoint()
+	client.Discovery()
 	req := client.NewReq("PATCH", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
+}
+
+// YangPatchData makes a YANG-PATCH (RFC 8072) request and returns a GJSON result.
+func (client *Client) YangPatchData(path, patchId, comment string, edits []YangPatchEdit, mods ...func(*Req)) (Res, error) {
+	client.Discovery()
+	data := YangPatchRootModel{YangPatch: YangPatchModel{PatchId: patchId, Comment: comment}}
+	for i, edit := range edits {
+		data.YangPatch.Edit = append(data.YangPatch.Edit, YangPatchEditModel{EditId: strconv.Itoa(i), Operation: edit.Operation, Target: edit.Target, Value: json.RawMessage(edit.Value.Str)})
+	}
+	json, err := json.Marshal(data)
+	if err != nil {
+		return Res{}, err
+	}
+	req := client.NewReq("PATCH", RestconfDataEndpoint+"/"+path, strings.NewReader(string(json)), mods...)
+	req.HttpReq.Header.Set("Content-Type", "application/yang-patch+json")
+	return client.Do(req)
+}
+
+// Create new YangPathEdit for YangPatchData()
+func NewYangPatchEdit(operation, target string, value Body) YangPatchEdit {
+	return YangPatchEdit{Operation: operation, Target: target, Value: value}
 }
 
 // Backoff waits following an exponential backoff algorithm

@@ -19,6 +19,7 @@ func testClient() Client {
 	client, _ := NewClient(testURL, "usr", "pwd", true, MaxRetries(0))
 	gock.InterceptClient(client.HttpClient)
 	gock.New(testURL).Get("/.well-known/host-meta").Reply(200).BodyString(`<XRD xmlns='http://docs.oasis-open.org/ns/xri/xrd-1.0'><Link rel='restconf' href='/restconf'/></XRD>`)
+	gock.New(testURL).Get("/restconf/data/ietf-restconf-monitoring:restconf-state/capabilities").Reply(200).BodyString(`{"ietf-restconf-monitoring:capabilities": {"capability": ["urn:ietf:params:restconf:capability:yang-patch:1.0"]}}`)
 	return client
 }
 
@@ -43,6 +44,15 @@ func TestDiscoverRestconfEndpoint(t *testing.T) {
 	client := testClient()
 	client.discoverRestconfEndpoint()
 	assert.Equal(t, client.RestconfEndpoint, "/restconf")
+}
+
+func TestDiscoverCapabilities(t *testing.T) {
+	defer gock.Off()
+	client := testClient()
+	client.discoverRestconfEndpoint()
+	client.discoverCapabilities()
+	assert.Equal(t, client.Capabilities, []string{"urn:ietf:params:restconf:capability:yang-patch:1.0"})
+	assert.Equal(t, client.YangPatchCapability, true)
 }
 
 // TestClientGet tests the Client::GetData method.
