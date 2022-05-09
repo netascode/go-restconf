@@ -1,4 +1,4 @@
-## 0.1.4 (unreleased)
+## 0.1.4
 
 - Discover RESTCONF capabilities
 - Add support for YANG-Patch (RFC 8072)
