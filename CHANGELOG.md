@@ -1,4 +1,4 @@
-## 0.1.6 (unreleased)
+## 0.1.6
 
 - Consider intermittently "inconsistent value" IOS-XE responses as transient errors
 
