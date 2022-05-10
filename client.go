@@ -41,6 +41,12 @@ type TransientError struct {
 }
 
 var TransientErrors = [...]TransientError{
+	// RESTCONF on IOS-XE intermittently responds with 400 / "inconsistent value"
+	TransientError{
+		StatusCode:   400,
+		ErrorTag:     "invalid-value",
+		ErrorMessage: "inconsistent value: Device refused one or more commands",
+	},
 	TransientError{
 		ErrorTag: "lock-denied",
 	},

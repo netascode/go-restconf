@@ -1,3 +1,7 @@
+## 0.1.6 (unreleased)
+
+- Consider intermittently "inconsistent value" IOS-XE responses as transient errors
+
 ## 0.1.5
 
 - Fix transient error handling
