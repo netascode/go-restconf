@@ -312,7 +312,16 @@ func (client *Client) Do(req Req) (Res, error) {
 				if err != nil {
 					log.Printf("[DEBUG] Failed to parse RESTCONF errors: %+v", err)
 				}
-				res.Errors = errors.Errors
+				if len(errors.Errors.Error) > 0 {
+					res.Errors = errors.Errors
+				} else {
+					var errors ErrorsRootNamespaceModel
+					err = json.Unmarshal(bodyBytes, &errors)
+					if err != nil {
+						log.Printf("[DEBUG] Failed to parse RESTCONF errors: %+v", err)
+					}
+					res.Errors = errors.Errors
+				}
 				res.YangPatchStatus = YangPatchStatusModel{}
 			} else if req.HttpReq.Header.Get("Content-Type") == "application/yang-patch+json" {
 				var status YangPatchStatusRootModel

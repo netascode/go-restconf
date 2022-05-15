@@ -4,6 +4,10 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+type ErrorsRootNamespaceModel struct {
+	Errors ErrorsModel `json:"ietf-restconf:errors"`
+}
+
 type ErrorsRootModel struct {
 	Errors ErrorsModel `json:"errors"`
 }

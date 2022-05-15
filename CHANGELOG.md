@@ -1,3 +1,7 @@
+## 0.1.7 (unreleased)
+
+- Fix error parsing if namespace is included in response
+
 ## 0.1.6
 
 - Consider intermittently "inconsistent value" IOS-XE responses as transient errors
