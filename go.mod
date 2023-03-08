@@ -3,7 +3,7 @@ module github.com/netascode/go-restconf
 go 1.18
 
 require (
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/tidwall/gjson v1.14.4
 	github.com/tidwall/sjson v1.2.5
 	gopkg.in/h2non/gock.v1 v1.1.2
