@@ -1,4 +1,4 @@
-## 0.1.8 (unreleased)
+## 0.1.8
 
 - Add option to skip discovery
 - Return error if discovery fails
