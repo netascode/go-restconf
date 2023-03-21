@@ -15,7 +15,7 @@ const (
 	testURL = "https://10.0.0.1"
 )
 
-func testClient() Client {
+func testClient() *Client {
 	client, _ := NewClient(testURL, "usr", "pwd", true, MaxRetries(0))
 	gock.InterceptClient(client.HttpClient)
 	gock.New(testURL).Get("/.well-known/host-meta").Reply(200).BodyString(`<XRD xmlns='http://docs.oasis-open.org/ns/xri/xrd-1.0'><Link rel='restconf' href='/restconf'/></XRD>`)

@@ -42,30 +42,30 @@ type TransientError struct {
 
 var TransientErrors = [...]TransientError{
 	// RESTCONF on IOS-XE intermittently responds with 400 / "inconsistent value"
-	TransientError{
+	{
 		StatusCode:   400,
 		ErrorTag:     "invalid-value",
 		ErrorMessage: "inconsistent value: Device refused one or more commands",
 	},
-	TransientError{
+	{
 		ErrorTag: "lock-denied",
 	},
-	TransientError{
+	{
 		ErrorTag: "in-use",
 	},
-	TransientError{
+	{
 		StatusCode: 500,
 	},
-	TransientError{
+	{
 		StatusCode: 501,
 	},
-	TransientError{
+	{
 		StatusCode: 502,
 	},
-	TransientError{
+	{
 		StatusCode: 503,
 	},
-	TransientError{
+	{
 		StatusCode: 504,
 	},
 }
@@ -112,8 +112,9 @@ type YangPatchEdit struct {
 
 // NewClient creates a new RESTCONF HTTP client.
 // Pass modifiers in to modify the behavior of the client, e.g.
-//  client, _ := NewClient("https://10.0.0.1", "user", "password", true, RequestTimeout(120))
-func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Client, error) {
+//
+//	client, _ := NewClient("https://10.0.0.1", "user", "password", true, RequestTimeout(120))
+func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (*Client, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
 	}
@@ -140,7 +141,7 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (Clie
 	for _, mod := range mods {
 		mod(&client)
 	}
-	return client, nil
+	return &client, nil
 }
 
 // RequestTimeout modifies the HTTP request timeout from the default of 60 seconds.
@@ -178,8 +179,17 @@ func BackoffDelayFactor(x float64) func(*Client) {
 	}
 }
 
+// SkipDiscovery provides the otherwise dynamically discovered capabilities
+func SkipDiscovery(restconfEndpoint string, yangPatchCapability bool) func(*Client) {
+	return func(client *Client) {
+		client.RestconfEndpoint = restconfEndpoint
+		client.YangPatchCapability = yangPatchCapability
+		client.DiscoveryComplete = true
+	}
+}
+
 // NewReq creates a new Req request for this client.
-func (client Client) NewReq(method, uri string, body io.Reader, mods ...func(*Req)) Req {
+func (client *Client) NewReq(method, uri string, body io.Reader, mods ...func(*Req)) Req {
 	httpReq, _ := http.NewRequest(method, client.Url+client.RestconfEndpoint+uri, body)
 	httpReq.SetBasicAuth(client.Usr, client.Pwd)
 	httpReq.Header.Add("Content-Type", "application/yang-data+json")
@@ -259,8 +269,8 @@ func checkTransientError(res Res) bool {
 // Do makes a request.
 // Requests for Do are built ouside of the client, e.g.
 //
-//  req := client.NewReq("GET", "Cisco-IOS-XE-native:native/hostname", nil)
-//  res, _ := client.Do(req)
+//	req := client.NewReq("GET", "Cisco-IOS-XE-native:native/hostname", nil)
+//	res, _ := client.Do(req)
 func (client *Client) Do(req Req) (Res, error) {
 	// retain the request body across multiple attempts
 	var body []byte
@@ -454,14 +464,20 @@ func (client *Client) discoverCapabilities(mods ...func(*Req)) error {
 
 // GetData makes a GET request and returns a GJSON result.
 func (client *Client) GetData(path string, mods ...func(*Req)) (Res, error) {
-	client.Discovery()
+	err := client.Discovery()
+	if err != nil {
+		return Res{}, err
+	}
 	req := client.NewReq("GET", RestconfDataEndpoint+"/"+path, nil, mods...)
 	return client.Do(req)
 }
 
 // DeleteData makes a DELETE request and returns a GJSON result.
 func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, error) {
-	client.Discovery()
+	err := client.Discovery()
+	if err != nil {
+		return Res{}, err
+	}
 	req := client.NewReq("DELETE", RestconfDataEndpoint+"/"+path, nil, mods...)
 	return client.Do(req)
 }
@@ -469,7 +485,10 @@ func (client *Client) DeleteData(path string, mods ...func(*Req)) (Res, error) {
 // PostData makes a POST request and returns a GJSON result.
 // Hint: Use the Body struct to easily create POST body data.
 func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, error) {
-	client.Discovery()
+	err := client.Discovery()
+	if err != nil {
+		return Res{}, err
+	}
 	req := client.NewReq("POST", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
 }
@@ -477,7 +496,10 @@ func (client *Client) PostData(path, data string, mods ...func(*Req)) (Res, erro
 // PutData makes a PUT request and returns a GJSON result.
 // Hint: Use the Body struct to easily create PUT body data.
 func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, error) {
-	client.Discovery()
+	err := client.Discovery()
+	if err != nil {
+		return Res{}, err
+	}
 	req := client.NewReq("PUT", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
 }
@@ -485,14 +507,20 @@ func (client *Client) PutData(path, data string, mods ...func(*Req)) (Res, error
 // PatchData makes a PATCH request and returns a GJSON result.
 // Hint: Use the Body struct to easily create PATCH body data.
 func (client *Client) PatchData(path, data string, mods ...func(*Req)) (Res, error) {
-	client.Discovery()
+	err := client.Discovery()
+	if err != nil {
+		return Res{}, err
+	}
 	req := client.NewReq("PATCH", RestconfDataEndpoint+"/"+path, strings.NewReader(data), mods...)
 	return client.Do(req)
 }
 
 // YangPatchData makes a YANG-PATCH (RFC 8072) request and returns a GJSON result.
 func (client *Client) YangPatchData(path, patchId, comment string, edits []YangPatchEdit, mods ...func(*Req)) (Res, error) {
-	client.Discovery()
+	err := client.Discovery()
+	if err != nil {
+		return Res{}, err
+	}
 	data := YangPatchRootModel{YangPatch: YangPatchModel{PatchId: patchId, Comment: comment}}
 	for i, edit := range edits {
 		data.YangPatch.Edit = append(data.YangPatch.Edit, YangPatchEditModel{EditId: strconv.Itoa(i), Operation: edit.Operation, Target: edit.Target, Value: json.RawMessage(edit.Value.Str)})

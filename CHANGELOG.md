@@ -1,3 +1,8 @@
+## 0.1.8 (unreleased)
+
+- Add option to skip discovery
+- Return error if discovery fails
+
 ## 0.1.7
 
 - Fix error parsing if namespace is included in response
