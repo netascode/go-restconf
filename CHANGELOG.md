@@ -1,3 +1,7 @@
+## 0.1.9 (unreleased)
+
+- Allow any type to be used with `Body.Set()`
+
 ## 0.1.8
 
 - Add option to skip discovery
