@@ -206,7 +206,11 @@ func (client *Client) NewReq(method, uri string, body io.Reader, mods ...func(*R
 // check if response is considered a transient error
 func checkTransientError(res Res) bool {
 	found := false
-	for _, resError := range res.Errors.Error {
+	errors := res.Errors.Error
+	for _, edit := range res.YangPatchStatus.EditStatus.Edit {
+		errors = append(errors, edit.Errors.Error...)
+	}
+	for _, resError := range errors {
 		for _, error := range TransientErrors {
 			found = false
 			if error.StatusCode != 0 {
@@ -340,7 +344,7 @@ func (client *Client) Do(req Req) (Res, error) {
 					log.Printf("[DEBUG] Failed to parse RESTCONF YANG-Patch status response: %+v", err)
 				}
 				res.YangPatchStatus = status.YangPatchStatus
-				res.Errors = ErrorsModel{}
+				res.Errors = status.YangPatchStatus.Errors
 			}
 		} else {
 			res.Errors = ErrorsModel{}

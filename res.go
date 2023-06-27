@@ -31,8 +31,9 @@ type YangPatchStatusRootModel struct {
 
 type YangPatchStatusModel struct {
 	PatchId      string                           `json:"patch-id"`
-	GlobalStatus YangPatchStatusGlobalStatusModel `json:"global-status"`
-	EditStatus   YangPatchStatusEditStatusModel   `json:"edit-status"`
+	GlobalStatus YangPatchStatusGlobalStatusModel `json:"global-status,omitempty"`
+	EditStatus   YangPatchStatusEditStatusModel   `json:"edit-status,omitempty"`
+	Errors       ErrorsModel                      `json:"errors,omitempty"`
 }
 
 type YangPatchStatusGlobalStatusModel struct {

@@ -1,3 +1,7 @@
+## 0.1.10 (unreleased)
+
+- Improve handling of YANG-Patch errors
+
 ## 0.1.9
 
 - Allow any type to be used with `Body.Set()`
