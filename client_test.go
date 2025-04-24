@@ -122,6 +122,16 @@ func TestClientPostData(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestClientPostDataWait(t *testing.T) {
+	defer gock.Off()
+	client := testClient()
+
+	gock.New(testURL).Post("/restconf/data/url").Reply(200)
+	gock.New(testURL).Get("/restconf/data/ietf-netconf-monitoring:netconf-state/datastores/datastore").Reply(200)
+	_, err := client.PostData("url", "{}", Wait)
+	assert.NoError(t, err)
+}
+
 // TestBackoff tests the Client::Backoff method.
 func TestBackoff(t *testing.T) {
 	client := testClient()

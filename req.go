@@ -61,6 +61,8 @@ func (body Body) Res() Res {
 type Req struct {
 	// HttpReq is the *http.Request object.
 	HttpReq *http.Request
+	// Wait until write operation is complete.
+	Wait bool
 }
 
 // Query sets an HTTP query parameter.
@@ -78,4 +80,10 @@ func Query(k, v string) func(req *Req) {
 		q.Add(k, v)
 		req.HttpReq.URL.RawQuery = q.Encode()
 	}
+}
+
+// Wait until write operation is complete.
+// This is only relevant for POST, PUT or DELETE requests.
+func Wait(req *Req) {
+	req.Wait = true
 }

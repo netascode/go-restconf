@@ -1,3 +1,8 @@
+## 0.1.11 (unreleased)
+
+- Honor proxy settings (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` environment variables)
+- Add `Wait` request option to block until a potential database lock on the device has been released
+
 ## 0.1.10
 
 - Improve handling of YANG-Patch errors

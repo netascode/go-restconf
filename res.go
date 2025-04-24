@@ -59,6 +59,25 @@ type CapabilitiesModel struct {
 	Capability []string `json:"capability"`
 }
 
+type DatastoreStatusRootModel struct {
+	Datastores []DatastoreModel `json:"ietf-netconf-monitoring:datastore"`
+}
+
+type DatastoreModel struct {
+	Name          string     `json:"name"`
+	Locks         LocksModel `json:"locks"`
+	TransactionId string     `json:"tailf-netconf-monitoring:transaction-id"`
+	Status        string     `json:"tailf-netconf-monitoring:status"`
+}
+
+type LocksModel struct {
+	PartialLock []PartialLockModel `json:"partial-lock"`
+}
+
+type PartialLockModel struct {
+	LockId string `json:"lock-id"`
+}
+
 // Res is an API response returned by client requests.
 // Res.Res is a GJSON result, which offers advanced and safe parsing capabilities.
 // https://github.com/tidwall/gjson

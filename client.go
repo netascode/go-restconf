@@ -114,9 +114,8 @@ type YangPatchEdit struct {
 //
 //	client, _ := NewClient("https://10.0.0.1", "user", "password", true, RequestTimeout(120))
 func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (*Client, error) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
-	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	cookieJar, _ := cookiejar.New(nil)
 	httpClient := http.Client{
@@ -389,6 +388,45 @@ func (client *Client) Do(req Req) (Res, error) {
 
 		log.Printf("[DEBUG] Exit from Do method")
 		break
+	}
+
+	if req.Wait && req.HttpReq.Method != "GET" {
+		log.Printf("[DEBUG] Waiting for write operation to complete")
+		for i := 0; i < 10; i++ {
+			wreq := client.NewReq("GET", RestconfDataEndpoint+"/ietf-netconf-monitoring:netconf-state/datastores/datastore", nil)
+			wres, err := client.HttpClient.Do(wreq.HttpReq)
+			if err != nil {
+				return res, err
+			}
+			defer wres.Body.Close()
+			bodyBytes, err := io.ReadAll(wres.Body)
+			if err != nil {
+				return res, err
+			}
+			bodyString := string(bodyBytes)
+			log.Printf("[DEBUG] HTTP RESTCONF Datastore State Response: %s", bodyString)
+
+			var status DatastoreStatusRootModel
+			err = json.Unmarshal(bodyBytes, &status)
+			if err != nil {
+				log.Printf("[DEBUG] Failed to parse RESTCONF Datastore State Response: %+v", err)
+			}
+
+			hasLock := false
+			for _, ds := range status.Datastores {
+				if ds.Name == "running" && ds.Status == "valid" && len(ds.Locks.PartialLock) > 0 {
+					hasLock = true
+					break
+				}
+			}
+
+			if !hasLock {
+				log.Printf("[DEBUG] Write operation completed")
+				break
+			}
+
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	return res, nil
