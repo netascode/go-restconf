@@ -1,4 +1,4 @@
-## 0.1.11 (unreleased)
+## 0.1.11
 
 - Honor proxy settings (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` environment variables)
 - Add `Wait` request option to block until a potential database lock on the device has been released
