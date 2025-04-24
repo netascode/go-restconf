@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
@@ -279,7 +278,7 @@ func (client *Client) Do(req Req) (Res, error) {
 	// retain the request body across multiple attempts
 	var body []byte
 	if req.HttpReq.Body != nil {
-		body, _ = ioutil.ReadAll(req.HttpReq.Body)
+		body, _ = io.ReadAll(req.HttpReq.Body)
 	}
 
 	res := Res{}
@@ -290,7 +289,7 @@ func (client *Client) Do(req Req) (Res, error) {
 	}
 
 	for attempts := 0; ; attempts++ {
-		req.HttpReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		req.HttpReq.Body = io.NopCloser(bytes.NewBuffer(body))
 		log.Printf("[DEBUG] HTTP Request: %s, %s, %s", req.HttpReq.Method, req.HttpReq.URL, req.HttpReq.Body)
 
 		httpRes, err := client.HttpClient.Do(req.HttpReq)
@@ -307,7 +306,7 @@ func (client *Client) Do(req Req) (Res, error) {
 
 		res.StatusCode = httpRes.StatusCode
 		defer httpRes.Body.Close()
-		bodyBytes, err := ioutil.ReadAll(httpRes.Body)
+		bodyBytes, err := io.ReadAll(httpRes.Body)
 		if err != nil {
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] Cannot decode response body: %+v", err)
@@ -420,7 +419,7 @@ func (client *Client) discoverRestconfEndpoint(mods ...func(*Req)) error {
 		return err
 	}
 	defer res.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(res.Body)
+	bodyBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
 	}
@@ -445,7 +444,7 @@ func (client *Client) discoverCapabilities(mods ...func(*Req)) error {
 		return err
 	}
 	defer res.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(res.Body)
+	bodyBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
 	}
