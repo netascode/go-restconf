@@ -27,6 +27,7 @@ const (
 	DefaultBackoffMaxDelay    int     = 60
 	DefaultBackoffDelayFactor float64 = 1.2
 	RestconfDataEndpoint      string  = "/data"
+	LockReleaseTimeout        int     = 90
 )
 
 type TransientError struct {
@@ -269,7 +270,7 @@ func checkTransientError(res Res) bool {
 }
 
 // Do makes a request.
-// Requests for Do are built ouside of the client, e.g.
+// Requests for Do are built outside of the client, e.g.
 //
 //	req := client.NewReq("GET", "Cisco-IOS-XE-native:native/hostname", nil)
 //	res, _ := client.Do(req)
@@ -392,7 +393,9 @@ func (client *Client) Do(req Req) (Res, error) {
 
 	if req.Wait && req.HttpReq.Method != "GET" {
 		log.Printf("[DEBUG] Waiting for write operation to complete")
-		for i := 0; i < 10; i++ {
+		// Wait as lock is not visible immediately after write operation
+		time.Sleep(500 * time.Millisecond)
+		for range LockReleaseTimeout {
 			wreq := client.NewReq("GET", RestconfDataEndpoint+"/ietf-netconf-monitoring:netconf-state/datastores/datastore", nil)
 			wres, err := client.HttpClient.Do(wreq.HttpReq)
 			if err != nil {

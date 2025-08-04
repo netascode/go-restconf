@@ -75,7 +75,7 @@ type LocksModel struct {
 }
 
 type PartialLockModel struct {
-	LockId string `json:"lock-id"`
+	LockId int `json:"lock-id"`
 }
 
 // Res is an API response returned by client requests.

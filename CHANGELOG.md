@@ -1,3 +1,8 @@
+
+## 0.1.12 (unreleased)
+
+- Extend wait time for release of device database lock to 90 seconds
+
 ## 0.1.11
 
 - Honor proxy settings (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` environment variables)
