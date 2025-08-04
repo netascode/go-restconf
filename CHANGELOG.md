@@ -1,5 +1,5 @@
 
-## 0.1.12 (unreleased)
+## 0.1.12
 
 - Extend wait time for release of device database lock to 90 seconds
 
