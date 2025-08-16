@@ -1,5 +1,5 @@
 
-## 0.1.13 (unreleased)
+## 0.1.13
 
 - Add generic support for waiting for device database sync operations to complete
 
