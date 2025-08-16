@@ -202,6 +202,18 @@ func (client *Client) NewReq(method, uri string, body io.Reader, mods ...func(*R
 	return req
 }
 
+// check if database sync is in progress
+func checkDatabaseSync(res Res) bool {
+	found := false
+	for _, resError := range res.Errors.Error {
+		if resError.ErrorTag == "in-use" && strings.Contains(resError.ErrorMessage, "sync in progress") {
+			found = true
+			break
+		}
+	}
+	return found
+}
+
 // check if response is considered a transient error
 func checkTransientError(res Res) bool {
 	found := false
@@ -318,6 +330,7 @@ func (client *Client) Do(req Req) (Res, error) {
 			}
 		}
 
+		// parse RESTCONF errors
 		if httpRes.StatusCode >= 300 && len(bodyBytes) > 0 {
 			if req.HttpReq.Header.Get("Content-Type") == "application/yang-data+json" {
 				var errors ErrorsRootModel
@@ -357,6 +370,23 @@ func (client *Client) Do(req Req) (Res, error) {
 			log.Printf("[DEBUG] Exit from Do method")
 			break
 		}
+		// check if database sync is in progress
+		if checkDatabaseSync(res) {
+			log.Printf("[DEBUG] Database sync in progress")
+			if ok := client.Backoff(attempts); !ok {
+				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
+				log.Printf("[DEBUG] Exit from Do method")
+				return res, fmt.Errorf("HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v", httpRes.StatusCode, res.Errors, res.YangPatchStatus)
+			} else {
+				log.Printf("[ERROR] HTTP Request failed: StatusCode %v, RESTCONF errors %+v %+v, Retries: %v", httpRes.StatusCode, res.Errors, res.YangPatchStatus, attempts)
+				if err := client.waitForLockRelease(); err != nil {
+					log.Printf("[ERROR] RESTCONF Waiting for lock release failed: %+v", err)
+					log.Printf("[DEBUG] Exit from Do method")
+					return res, fmt.Errorf("RESTCONF Waiting for lock release failed: %+v", err)
+				}
+				continue
+			}
+		}
 		// check transient errors
 		if checkTransientError(res) {
 			log.Printf("[DEBUG] Transient error detected")
@@ -394,45 +424,56 @@ func (client *Client) Do(req Req) (Res, error) {
 	if req.Wait && req.HttpReq.Method != "GET" {
 		log.Printf("[DEBUG] Waiting for write operation to complete")
 		// Wait as lock is not visible immediately after write operation
-		time.Sleep(500 * time.Millisecond)
-		for range LockReleaseTimeout {
-			wreq := client.NewReq("GET", RestconfDataEndpoint+"/ietf-netconf-monitoring:netconf-state/datastores/datastore", nil)
-			wres, err := client.HttpClient.Do(wreq.HttpReq)
-			if err != nil {
-				return res, err
-			}
-			defer wres.Body.Close()
-			bodyBytes, err := io.ReadAll(wres.Body)
-			if err != nil {
-				return res, err
-			}
-			bodyString := string(bodyBytes)
-			log.Printf("[DEBUG] HTTP RESTCONF Datastore State Response: %s", bodyString)
-
-			var status DatastoreStatusRootModel
-			err = json.Unmarshal(bodyBytes, &status)
-			if err != nil {
-				log.Printf("[DEBUG] Failed to parse RESTCONF Datastore State Response: %+v", err)
-			}
-
-			hasLock := false
-			for _, ds := range status.Datastores {
-				if ds.Name == "running" && ds.Status == "valid" && len(ds.Locks.PartialLock) > 0 {
-					hasLock = true
-					break
-				}
-			}
-
-			if !hasLock {
-				log.Printf("[DEBUG] Write operation completed")
-				break
-			}
-
-			time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second)
+		if err := client.waitForLockRelease(); err != nil {
+			log.Printf("[ERROR] RESTCONF Waiting for lock release failed: %+v", err)
+			log.Printf("[DEBUG] Exit from Do method")
+			return res, fmt.Errorf("RESTCONF Waiting for lock release failed: %+v", err)
 		}
 	}
 
 	return res, nil
+}
+
+// Wait for lock release
+func (client *Client) waitForLockRelease() error {
+	for range LockReleaseTimeout {
+		wreq := client.NewReq("GET", RestconfDataEndpoint+"/ietf-netconf-monitoring:netconf-state/datastores/datastore", nil)
+		wres, err := client.HttpClient.Do(wreq.HttpReq)
+		if err != nil {
+			return err
+		}
+		defer wres.Body.Close()
+		bodyBytes, err := io.ReadAll(wres.Body)
+		if err != nil {
+			return err
+		}
+		bodyString := string(bodyBytes)
+		log.Printf("[DEBUG] HTTP RESTCONF Datastore State Response: %s", bodyString)
+
+		var status DatastoreStatusRootModel
+		err = json.Unmarshal(bodyBytes, &status)
+		if err != nil {
+			log.Printf("[DEBUG] Failed to parse RESTCONF Datastore State Response: %+v", err)
+		}
+
+		hasLock := false
+		for _, ds := range status.Datastores {
+			if ds.Name == "running" && ds.Status == "valid" && len(ds.Locks.PartialLock) > 0 {
+				hasLock = true
+				break
+			}
+		}
+
+		if !hasLock {
+			log.Printf("[DEBUG] Lock has been released")
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
+	return nil
 }
 
 func (client *Client) Discovery(mods ...func(*Req)) error {
