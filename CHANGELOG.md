@@ -1,4 +1,4 @@
-## 0.1.16 (unreleased)
+## 0.1.16
 
 - Change per request HTTP timeout to seconds instead of time.Duration
 
