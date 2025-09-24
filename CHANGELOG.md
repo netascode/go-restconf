@@ -1,4 +1,4 @@
-## 0.1.15 (unreleased)
+## 0.1.15
 
 - Add configurable per request HTTP timeout
 
