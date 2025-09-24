@@ -27,7 +27,7 @@ const (
 	DefaultBackoffMaxDelay    int     = 60
 	DefaultBackoffDelayFactor float64 = 1.2
 	RestconfDataEndpoint      string  = "/data"
-	LockReleaseTimeout        int     = 90
+	DefaultLockReleaseTimeout int     = 120
 )
 
 type TransientError struct {
@@ -94,6 +94,8 @@ type Client struct {
 	BackoffMaxDelay int
 	// Backoff delay factor
 	BackoffDelayFactor float64
+	// Timeout for lock release
+	LockReleaseTimeout int
 	// True if discovery (RESTCONF API endpoint and capabilities) is complete
 	DiscoveryComplete bool
 	// Discovered RESTCONF API endpoint
@@ -135,6 +137,7 @@ func NewClient(url, usr, pwd string, insecure bool, mods ...func(*Client)) (*Cli
 		BackoffMinDelay:    DefaultBackoffMinDelay,
 		BackoffMaxDelay:    DefaultBackoffMaxDelay,
 		BackoffDelayFactor: DefaultBackoffDelayFactor,
+		LockReleaseTimeout: DefaultLockReleaseTimeout,
 	}
 
 	for _, mod := range mods {
@@ -175,6 +178,13 @@ func BackoffMaxDelay(x int) func(*Client) {
 func BackoffDelayFactor(x float64) func(*Client) {
 	return func(client *Client) {
 		client.BackoffDelayFactor = x
+	}
+}
+
+// LockReleaseTimeout modifies the timeout for lock release from the default of 120 seconds.
+func LockReleaseTimeout(x int) func(*Client) {
+	return func(client *Client) {
+		client.LockReleaseTimeout = x
 	}
 }
 
@@ -437,7 +447,7 @@ func (client *Client) Do(req Req) (Res, error) {
 
 // Wait for lock release
 func (client *Client) waitForLockRelease() error {
-	for range LockReleaseTimeout {
+	for range client.LockReleaseTimeout {
 		wreq := client.NewReq("GET", RestconfDataEndpoint+"/ietf-netconf-monitoring:netconf-state/datastores/datastore", nil)
 		wres, err := client.HttpClient.Do(wreq.HttpReq)
 		if err != nil {

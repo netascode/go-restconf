@@ -1,3 +1,6 @@
+## 0.1.14 (unrelease)
+
+- Extend default wait time for release of device database lock to 120 seconds and make it configurable
 
 ## 0.1.13
 
