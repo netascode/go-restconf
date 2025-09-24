@@ -1,3 +1,7 @@
+## 0.1.15 (unreleased)
+
+- Add configurable per request HTTP timeout
+
 ## 0.1.14
 
 - Extend default wait time for release of device database lock to 120 seconds and make it configurable

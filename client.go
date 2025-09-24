@@ -310,11 +310,21 @@ func (client *Client) Do(req Req) (Res, error) {
 		defer client.mutex.Unlock()
 	}
 
+	// Use per-request timeout if specified, otherwise use client's default timeout
+	httpClient := client.HttpClient
+	if req.Timeout > 0 {
+		httpClient = &http.Client{
+			Timeout:   req.Timeout,
+			Transport: client.HttpClient.Transport,
+			Jar:       client.HttpClient.Jar,
+		}
+	}
+
 	for attempts := 0; ; attempts++ {
 		req.HttpReq.Body = io.NopCloser(bytes.NewBuffer(body))
 		log.Printf("[DEBUG] HTTP Request: %s, %s, %s", req.HttpReq.Method, req.HttpReq.URL, req.HttpReq.Body)
 
-		httpRes, err := client.HttpClient.Do(req.HttpReq)
+		httpRes, err := httpClient.Do(req.HttpReq)
 		if err != nil {
 			if ok := client.Backoff(attempts); !ok {
 				log.Printf("[ERROR] HTTP Connection error occured: %+v", err)

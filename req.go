@@ -3,6 +3,7 @@ package restconf
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -63,6 +64,8 @@ type Req struct {
 	HttpReq *http.Request
 	// Wait until write operation is complete.
 	Wait bool
+	// Timeout for this specific request (optional).
+	Timeout time.Duration
 }
 
 // Query sets an HTTP query parameter.
@@ -86,4 +89,14 @@ func Query(k, v string) func(req *Req) {
 // This is only relevant for POST, PUT or DELETE requests.
 func Wait(req *Req) {
 	req.Wait = true
+}
+
+// Timeout sets a custom timeout for this specific request.
+// If not set, the client's default timeout will be used.
+//
+//	client.GetData("Cisco-IOS-XE-native:native", restconf.Timeout(30*time.Second))
+func Timeout(timeout time.Duration) func(req *Req) {
+	return func(req *Req) {
+		req.Timeout = timeout
+	}
 }

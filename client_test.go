@@ -38,6 +38,28 @@ func TestNewClient(t *testing.T) {
 	assert.Equal(t, client.MaxRetries, 0)
 }
 
+// TestPerRequestTimeout tests per-request timeout functionality.
+func TestPerRequestTimeout(t *testing.T) {
+	defer gock.Off()
+	client := testClient()
+
+	// Test that the timeout modifier function works correctly
+	req := client.NewReq("GET", RestconfDataEndpoint+"/url", nil, Timeout(30*time.Second))
+	assert.Equal(t, req.Timeout, 30*time.Second)
+
+	// Test that the timeout modifier function works on existing requests
+	timeoutFunc := Timeout(45 * time.Second)
+	req2 := client.NewReq("GET", RestconfDataEndpoint+"/url", nil)
+	timeoutFunc(&req2)
+	assert.Equal(t, req2.Timeout, 45*time.Second)
+
+	// Test convenience methods with timeout modifier
+	// This mainly tests that the modifier is properly passed through
+	gock.New(testURL).Get("/restconf/data/test").Reply(200)
+	_, err := client.GetData("test", Timeout(15*time.Second))
+	assert.NoError(t, err)
+}
+
 // TestDiscoverRestconfEndpoint tests the Client::discoverRestconfEndpoint method.
 func TestDiscoverRestconfEndpoint(t *testing.T) {
 	defer gock.Off()
