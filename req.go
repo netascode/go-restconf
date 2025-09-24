@@ -91,12 +91,12 @@ func Wait(req *Req) {
 	req.Wait = true
 }
 
-// Timeout sets a custom timeout for this specific request.
+// Timeout sets a custom timeout for this specific request in seconds.
 // If not set, the client's default timeout will be used.
 //
-//	client.GetData("Cisco-IOS-XE-native:native", restconf.Timeout(30*time.Second))
-func Timeout(timeout time.Duration) func(req *Req) {
+//	client.GetData("Cisco-IOS-XE-native:native", restconf.Timeout(30))
+func Timeout(timeoutSeconds int) func(req *Req) {
 	return func(req *Req) {
-		req.Timeout = timeout
+		req.Timeout = time.Duration(timeoutSeconds) * time.Second
 	}
 }

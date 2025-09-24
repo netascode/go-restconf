@@ -1,3 +1,7 @@
+## 0.1.16 (unreleased)
+
+- Change per request HTTP timeout to seconds instead of time.Duration
+
 ## 0.1.15
 
 - Add configurable per request HTTP timeout
