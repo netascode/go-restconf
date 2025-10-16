@@ -220,6 +220,10 @@ func checkDatabaseSync(res Res) bool {
 			found = true
 			break
 		}
+		if resError.ErrorTag == "resource-denied" && strings.Contains(resError.ErrorMessage, "Sync is in progress") {
+			found = true
+			break
+		}
 	}
 	return found
 }

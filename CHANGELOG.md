@@ -1,3 +1,7 @@
+## 0.1.17 (unreleased)
+
+- Enhance database synchronization detection
+
 ## 0.1.16
 
 - Change per request HTTP timeout to seconds instead of time.Duration
