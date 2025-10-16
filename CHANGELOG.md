@@ -1,4 +1,4 @@
-## 0.1.17 (unreleased)
+## 0.1.17
 
 - Enhance database synchronization detection
 
