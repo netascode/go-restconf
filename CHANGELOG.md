@@ -1,4 +1,4 @@
-## 0.1.18 (unreleased)
+## 0.1.18
 
 - Extend list of transient error patterns
 
