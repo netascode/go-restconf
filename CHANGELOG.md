@@ -1,3 +1,7 @@
+## 0.1.18 (unreleased)
+
+- Extend list of transient error patterns
+
 ## 0.1.17
 
 - Enhance database synchronization detection

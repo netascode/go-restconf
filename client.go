@@ -48,6 +48,11 @@ var TransientErrors = [...]TransientError{
 		ErrorMessage: "inconsistent value: Device refused one or more commands",
 	},
 	{
+		StatusCode:   400,
+		ErrorTag:     "invalid-value",
+		ErrorMessage: "Failed to acquire datastore lock",
+	},
+	{
 		ErrorTag: "lock-denied",
 	},
 	{
